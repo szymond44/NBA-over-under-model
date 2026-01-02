@@ -12,7 +12,7 @@ We run three parallel Elo rating systems for every team. Unlike standard win/los
 2. **Defensive rating:** points allowed per 100 possessions.
 3. **Pace rating:** possessions per 48 minutes.
 
-**The math (update rule):**
+**Math behind update rule**
 For every game, we update a team's rating (R) based on the difference between their actual performance and expected performance.
 
 ```math
@@ -21,7 +21,7 @@ R_{new} = R_{old} + K \cdot (Actual - Expected)
 ```
 
 * (k-factor): is set to `0.15`. This controls reactivity; a lower  makes the ratings more stable, while a higher  makes them react wildly to a single blowout.
-* We use reversion to mean after, so with every update, we pull the rating `1%` back toward the league average. This prevents ratings from "drifting" too far into unrealistic territory over a long season.
+* We use reversion to mean so with every update, we pull the rating `1%` back toward the league average. This prevents ratings from "drifting" too far into unrealistic territory over a long season.
 
 **Calculating expectation:**
 We adjust a team's offensive rating based on the opponent's defensive strength relative to the league average:
@@ -33,7 +33,7 @@ Exp_{HomeOff} = Home_{OffRtg} + (Away_{DefRtg} - Avg_{LeagueDef})
 
 * *Intuition:* if the home team has a rating of 115, but plays a defense that is 5 points better than average, we expect the home team to score only 110.
 
-### b. Rolling stats (form)
+### b. Rolling stats 
 
 While Elo captures "true quality," we also need to capture "current form" (hot/cold streaks). We use **5-game rolling averages** for:
 
@@ -65,7 +65,7 @@ To mitigate risk, we train two distinct XGBoost models with different "personali
 ### 🔥 The chaos model (the reactant)
 
 * **Goal:** capturing volatility and modern meta-shifts.
-* **Data:** trains only on data since Jan 1, 2024. This acts as a "memory wipe," forcing the model to ignore older, slower-paced eras of basketball.
+* **Data:** trains only on data since  2023/2024 season. This forces the model to take into account higher paced era of basketball (which was these 2 seaons)
 * **Hyperparameters:**
 * `learning_rate`: 0.05 (aggressive learning)
 * `max_depth`: 8 (deep trees to model complex, specific interactions)
