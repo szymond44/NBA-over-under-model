@@ -62,7 +62,7 @@ To mitigate risk, we train two distinct XGBoost models with different "personali
 
 
 
-### 🔥 The chaos model (the reactant)
+### The chaos model 
 
 * **Goal:** capturing volatility and modern meta-shifts.
 * **Data:** trains only on data since  1st January. It is an arbitrary date, however its main goal is to force the model to take into account higher paced era of basketball which happened in recent years.
@@ -83,7 +83,6 @@ Prediction_{Total} = Pred_{Home} + Pred_{Away}
 ```
 
 **Signal generation:**
-We look for **consensus**.
 
 * If **conservative** says over 220
 * and **chaos** says over 225
