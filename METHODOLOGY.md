@@ -20,8 +20,8 @@ R_{new} = R_{old} + K \cdot (Actual - Expected)
 
 ```
 
-* ** (k-factor):** set to `0.15`. This controls reactivity; a lower  makes the ratings more stable, while a higher  makes them react wildly to a single blowout.
-* **Reversion to mean:** after every update, we pull the rating `1%` back toward the league average. This prevents ratings from "drifting" too far into unrealistic territory over a long season.
+* (k-factor): is set to `0.15`. This controls reactivity; a lower  makes the ratings more stable, while a higher  makes them react wildly to a single blowout.
+* We use reversion to mean after, so with every update, we pull the rating `1%` back toward the league average. This prevents ratings from "drifting" too far into unrealistic territory over a long season.
 
 **Calculating expectation:**
 We adjust a team's offensive rating based on the opponent's defensive strength relative to the league average:
