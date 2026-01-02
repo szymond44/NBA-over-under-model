@@ -4,8 +4,6 @@ import xgboost as xgb
 from sklearn.metrics import mean_squared_error
 import os
 
-
-# Define the 14 features used for both training and inference.
 FEATURES = [
     'home_off_rating_pre', 'home_def_rating_pre', 'home_pace_rating_pre', 'home_rest_days',
     'away_off_rating_pre', 'away_def_rating_pre', 'away_pace_rating_pre', 'away_rest_days',
@@ -14,124 +12,129 @@ FEATURES = [
 ]
 
 def load_data(input_file='nba_features_with_rolling.csv'):
-    """Loads the final feature set from the data folder."""
-    
-    # Path setup: assumes file is in data/ folder relative to project root
     base_dir = 'data'
     input_path = os.path.join(base_dir, input_file)
-    
     if not os.path.exists(input_path):
-        raise FileNotFoundError(f"CRITICAL ERROR: Could not find {input_path}. \n"
-                                f"Please ensure the feature engineering step was completed.")
-
+        raise FileNotFoundError(f"CRITICAL ERROR: Could not find {input_path}.")
     df = pd.read_csv(input_path)
     df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'])
-    # Sort is critical for chronological integrity
     df = df.sort_values(['GAME_DATE', 'GAME_ID']).reset_index(drop=True)
     return df
 
+def get_params(mode):
+    if mode == 'conservative':
+        # Conservative: safe, smoothed parameters
+        return {
+            'objective': 'reg:squarederror',
+            'n_estimators': 1200, 
+            'learning_rate': 0.02, 
+            'max_depth': 4,
+            'min_child_weight': 3, 
+            'gamma': 2, 
+            'n_jobs': -1,
+            'subsample': 0.7,
+            'colsample_bytree': 0.7,
+        }
+    elif mode == 'chaos':
+        # Chaos: volatile, over-reactive parameters
+        return {
+            'objective': 'reg:squarederror',
+            'n_estimators': 2000, 
+            'learning_rate': 0.05,  
+            'max_depth': 8,         
+            'min_child_weight': 0,  
+            'gamma': 0,             
+            'subsample': 1.0,      
+            'n_jobs': -1
+        }
 
-def train_and_evaluate(df, start_date='2023-10-24'):
-    """
-    Performs Walk-Forward Validation (retrains monthly) to establish model accuracy.
-    Returns the two final trained models.
-    """
-    
-    # Define monthly windows for retraining
-    start_date = pd.Timestamp(start_date)
-    dates = pd.date_range(start=start_date, end=df['GAME_DATE'].max(), freq='MS')
-    
-    # Model Hyperparameters
-    params = {
-        'objective': 'reg:squarederror',
-    
-        'n_estimators': 1200,    
-        'learning_rate': 0.02,    
-        'max_depth': 4,            
-        'min_child_weight': 3,    
-        'gamma': 2,                   
-        'subsample': 0.7,         
-        'colsample_bytree': 0.7,   
-        'n_jobs': -1
-    }
-    
+def train_specific_model(df, dates, params, mode='normal'):
     all_preds = []
-    final_model_home = None
-    final_model_away = None
+    final_mh = None
+    final_ma = None
 
-    # Loop through each window (retrain on past, predict on next month)
     for i in range(len(dates) - 1):
         train_end = dates[i]
-        
-        # Split: ensure no future data leaks into training set
-        train_df = df[df['GAME_DATE'] < train_end]
+        if mode == 'chaos':
+            # Chaos only eats data from Jan 2024 onwards.
+            cutoff_date = pd.Timestamp('2024-01-01')
+            train_df = df[(df['GAME_DATE'] < train_end) & (df['GAME_DATE'] >= cutoff_date)].copy()
+        else:
+            # Anchor gets all the data
+            train_df = df[df['GAME_DATE'] < train_end].copy()
+            
         test_df = df[(df['GAME_DATE'] >= train_end) & (df['GAME_DATE'] < dates[i+1])].copy()
         
         if len(test_df) == 0: continue
+        if len(train_df) < 50: continue # Skip if not enough recent data
+
+        # Train
+        mh = xgb.XGBRegressor(**params)
+        mh.fit(train_df[FEATURES], train_df['PTS_home'])
         
-        # 1. Train Twin Regressors
-        xgb_home = xgb.XGBRegressor(**params)
-        xgb_home.fit(train_df[FEATURES], train_df['PTS_home'])
+        ma = xgb.XGBRegressor(**params)
+        ma.fit(train_df[FEATURES], train_df['PTS_away'])
         
-        xgb_away = xgb.XGBRegressor(**params)
-        xgb_away.fit(train_df[FEATURES], train_df['PTS_away'])
-        
-        # 2. Predict and Store
-        test_df['pred_home'] = xgb_home.predict(test_df[FEATURES])
-        test_df['pred_away'] = xgb_away.predict(test_df[FEATURES])
+        # Predict
+        test_df['pred_home'] = mh.predict(test_df[FEATURES])
+        test_df['pred_away'] = ma.predict(test_df[FEATURES])
         all_preds.append(test_df)
         
-        # Keep the latest trained models for live prediction (the Oracle)
-        final_model_home = xgb_home
-        final_model_away = xgb_away
-        
-    # Final Metrics
+        final_mh = mh
+        final_ma = ma
+
+    if not all_preds: return None, None, 0.0
+
     full_res = pd.concat(all_preds)
     full_res['pred_total'] = full_res['pred_home'] + full_res['pred_away']
-    rmse_total = np.sqrt(mean_squared_error(full_res['PTS_home'] + full_res['PTS_away'], full_res['pred_total']))
-    print(f'The model rmse is {rmse_total}')
-    return final_model_home, final_model_away, rmse_total
+    rmse = np.sqrt(mean_squared_error(full_res['PTS_home'] + full_res['PTS_away'], full_res['pred_total']))
+    
+    return final_mh, final_ma, rmse
 
+def train_and_evaluate(df, start_date='2023-10-24'):
+    dates = pd.date_range(start=pd.Timestamp(start_date), end=df['GAME_DATE'].max(), freq='W-SUN')
+    
+    # 1. Conservative (full history)
+    cons_h, cons_a, cons_rmse = train_specific_model(df, dates, get_params('conservative'), mode='conservative')
+    print(f'Conservative RMSE: {cons_rmse}')
+
+    # 2. Chaos (modern era only)
+    chaos_h, chaos_a, chaos_rmse = train_specific_model(df, dates, get_params('chaos'), mode='chaos')
+    print(f'Chaos RMSE: {chaos_rmse}')
+    
+    return (cons_h, cons_a), (chaos_h, chaos_a), (cons_rmse, chaos_rmse)
 
 class NBAOracle:
-    """
-    The Inference Engine: Holds the trained models and provides a live prediction API.
-    """
-    def __init__(self, df, model_home, model_away):
+    def __init__(self, df, cons_models, chaos_models):
         self.df = df
-        self.mh = model_home
-        self.ma = model_away
-        
-        # Index is built only once at initialization
+        self.cons_h, self.cons_a = cons_models
+        self.chaos_h, self.chaos_a = chaos_models
         self.index = self._build_index()
         
     def _build_index(self):
-        """Builds a dictionary lookup of the most recent features for every team."""
         cols = ['GAME_DATE', 'TEAM', 'OFF', 'DEF', 'PACE', 'ROLL_PTS', 'ROLL_PACE', 'ROLL_WIN']
         
-        # Stack stats (Home and Away) to get latest history for ALL teams
-        h = self.df[['GAME_DATE', 'TEAM_NAME_home', 'home_off_rating_pre', 'home_def_rating_pre', 'home_pace_rating_pre', 'home_roll_pts', 'home_roll_pace', 'home_roll_win']].copy()
+        h = self.df[['GAME_DATE', 'TEAM_NAME_home', 'home_off_rating_pre', 'home_def_rating_pre', 
+                     'home_pace_rating_pre', 'home_roll_pts', 'home_roll_pace', 'home_roll_win']].copy()
         h.columns = cols
         
-        a = self.df[['GAME_DATE', 'TEAM_NAME_away', 'away_off_rating_pre', 'away_def_rating_pre', 'away_pace_rating_pre', 'away_roll_pts', 'away_roll_pace', 'away_roll_win']].copy()
+        a = self.df[['GAME_DATE', 'TEAM_NAME_away', 'away_off_rating_pre', 'away_def_rating_pre', 
+                     'away_pace_rating_pre', 'away_roll_pts', 'away_roll_pace', 'away_roll_win']].copy()
         a.columns = cols
         
         return pd.concat([h, a]).sort_values('GAME_DATE').groupby('TEAM').last().to_dict('index')
     
     def predict(self, home, away):
-        """Generates the total score prediction for a given matchup."""
-        
         if home not in self.index or away not in self.index:
-            return "Error: Team not found in historical data."
+            print(f"Error: Team not found ({home} or {away})")
+            return
             
         h_stats, a_stats = self.index[home], self.index[away]
         today = pd.to_datetime('today')
         
-        # Calculate Rest Days based on the last game date found in history
         h_rest = min((today - h_stats['GAME_DATE']).days, 7)
         a_rest = min((today - a_stats['GAME_DATE']).days, 7)
         
-        # Construct Feature Vector (Must match the features list order)
         input_data = {
             'home_off_rating_pre': [h_stats['OFF']], 'home_def_rating_pre': [h_stats['DEF']],
             'home_pace_rating_pre': [h_stats['PACE']], 'home_rest_days': [h_rest],
@@ -141,7 +144,13 @@ class NBAOracle:
             'away_roll_pts': [a_stats['ROLL_PTS']], 'away_roll_pace': [a_stats['ROLL_PACE']], 'away_roll_win': [a_stats['ROLL_WIN']]
         }
         
-        # 3. Predict and Output
-        ph = self.mh.predict(pd.DataFrame(input_data))[0]
-        pa = self.ma.predict(pd.DataFrame(input_data))[0]
-        print(f"Projected: {home} {ph:.1f} - {pa:.1f} {away} (Total: {ph+pa:.1f})")
+        df_in = pd.DataFrame(input_data)
+        
+        # Predictions
+        c_ph = self.cons_h.predict(df_in)[0]
+        c_pa = self.cons_a.predict(df_in)[0]
+        k_ph = self.chaos_h.predict(df_in)[0]
+        k_pa = self.chaos_a.predict(df_in)[0]
+        
+        print(f"Conservative model: {home} {c_ph:.1f} - {c_pa:.1f} {away} (Total: {c_ph+c_pa:.1f})")
+        print(f"Chaos model: {home} {k_ph:.1f} - {k_pa:.1f} {away} (Total: {k_ph+k_pa:.1f})")
