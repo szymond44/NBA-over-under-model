@@ -84,9 +84,7 @@ Prediction_{Total} = Pred_{Home} + Pred_{Away}
 
 **Signal generation:**
 
-* If **conservative** says over 220
-* and **chaos** says over 225
-* and Vegas line is 215 ->
+* If **conservative** says over 220 and **chaos** says over 225 and Vegas line is 215 ->
 * **Result:** strong buy signal on the over.
 
 If the models disagree (e.g., conservative says under, chaos says over), the signal is considered "no bet" due to high uncertainty.
