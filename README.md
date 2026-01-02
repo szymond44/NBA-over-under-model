@@ -10,8 +10,8 @@ The model combines two statistical approaches:
 ## How It Works
 The system runs two distinct XGBoost models with different "personalities" to analyze the game:
 
-* ** The Conservative Model:** Uses a lower learning rate and deeper historical data. Its goal is to capture long-term trends and provide stability.
-* ** The Chaos Model:** Uses a high learning rate and only looks at data from the "modern scoring era" (post-Jan 2024). Its goal is to react aggressively to recent volatility and scoring explosions.
+*  The Conservative Model: Uses a lower learning rate and deeper historical data. Its goal is to capture long-term trends and provide stability.
+*  The Chaos Model: Uses a high learning rate and only looks at data from the "modern scoring era" (post-Jan 2024). Its goal is to react aggressively to recent volatility and scoring explosions.
 
 ## Betting Logic
 The strongest signals occur when **both models agree** on the outcome (e.g., both predict the Over, or both predict the Home team covers).
