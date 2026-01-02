@@ -14,7 +14,7 @@ The system runs two distinct XGBoost models with different "personalities" to an
 *  The Chaos Model: Uses a high learning rate and only looks at data from the "modern scoring era" (post-Jan 2024). Its goal is to react aggressively to recent volatility and scoring explosions.
 
 ## Betting Logic
-The strongest signals occur when **both models agree** on the outcome (e.g., both predict the Over, or both predict the Home team covers).
+The strongest signals occur when both models agree on the outcome (e.g., both predict the over, or both predict the home team covers).
 
 ## Important Note
 This model relies purely on statistical trends and does not take daily roster changes (injuries/resting) into account directly. Always double-check the injury report—especially if the Vegas line looks "too good to be true."
