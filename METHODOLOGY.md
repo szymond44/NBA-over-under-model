@@ -65,7 +65,7 @@ To mitigate risk, we train two distinct XGBoost models with different "personali
 ### 🔥 The chaos model (the reactant)
 
 * **Goal:** capturing volatility and modern meta-shifts.
-* **Data:** trains only on data since  2023/2024 season. This forces the model to take into account higher paced era of basketball (which was these 2 seaons)
+* **Data:** trains only on data since  1st January. It is an arbitrary date, however its main goal is to force the model to take into account higher paced era of basketball which happened in recent years.
 * **Hyperparameters:**
 * `learning_rate`: 0.05 (aggressive learning)
 * `max_depth`: 8 (deep trees to model complex, specific interactions)
